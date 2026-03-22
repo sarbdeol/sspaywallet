@@ -192,10 +192,12 @@ async def my_transactions(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
 ):
     wallet = await get_sub_wallet_by_user(db, current_user.id)
     items, total = await list_wallet_transactions(
-        db, wallet.id, page, page_size, status
+        db, wallet.id, page, page_size, status, date_from, date_to
     )
     return TransactionListOut(items=items, total=total, page=page, page_size=page_size)
 

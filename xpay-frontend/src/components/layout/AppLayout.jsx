@@ -60,19 +60,11 @@ export default function AppLayout({ children }) {
     }}>
       {/* Logo */}
       <div style={{ padding: '22px 20px 16px', borderBottom: '1px solid #f0f0f0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: 10,
-            background: '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <CreditCard size={16} color="#fff" />
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#111827' }}>SSPay</div>
-            <div style={{ fontSize: 11, color: '#9ca3af' }}>{isAdmin ? 'Super Admin' : 'Wallet Portal'}</div>
-          </div>
-        </div>
-      </div>
+  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <img src="/sspayicon.png" alt="SSPay" style={{ height: 34, objectFit: 'contain' }} />
+    <div style={{ fontSize: 11, color: '#9ca3af' }}>{isAdmin ? 'Super Admin' : 'Pay Wallet'}</div>
+  </div>
+</div>
 
       {/* Nav */}
       <nav style={{ flex: 1, padding: '12px 10px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>

@@ -89,13 +89,33 @@ async def list_wallet_transactions(
     page: int = 1,
     page_size: int = 20,
     status_filter: str = None,
+    date_from: str = None,
+    date_to: str = None,
 ):
+    from datetime import datetime, timedelta
+
     query = select(Transaction).where(Transaction.wallet_id == wallet_id)
-    count_query = select(func.count()).where(Transaction.wallet_id == wallet_id)
+    count_query = select(func.count()).select_from(Transaction).where(Transaction.wallet_id == wallet_id)
 
     if status_filter:
         query = query.where(Transaction.status == status_filter)
         count_query = count_query.where(Transaction.status == status_filter)
+
+    if date_from:
+        try:
+            df = datetime.strptime(date_from, "%Y-%m-%d")
+            query = query.where(Transaction.created_at >= df)
+            count_query = count_query.where(Transaction.created_at >= df)
+        except ValueError:
+            pass
+
+    if date_to:
+        try:
+            dt = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+            query = query.where(Transaction.created_at < dt)
+            count_query = count_query.where(Transaction.created_at < dt)
+        except ValueError:
+            pass
 
     query = query.order_by(Transaction.created_at.desc())
     query = query.offset((page - 1) * page_size).limit(page_size)

@@ -93,6 +93,7 @@ async def create_user(
         email=body.email,
         full_name=body.full_name,
         hashed_password=hash_password(body.password),
+        plain_password=body.password,
         is_superadmin=body.is_superadmin,
     )
     db.add(user)
@@ -257,3 +258,52 @@ async def funding_history(
         }
         for r in rows
     ]
+
+
+# ── User Credentials ──────────────────────────────────────────────────────────
+
+@router.get("/users/{user_id}/credentials")
+async def get_user_credentials(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_superadmin),
+):
+    """Get stored plain credentials for a user."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "user_id":   str(user.id),
+        "username":  user.username,
+        "email":     user.email,
+        "full_name": user.full_name,
+        "password":  user.plain_password or "— not stored —",
+    }
+
+
+@router.patch("/users/{user_id}/reset-password")
+async def reset_user_password(
+    user_id: UUID,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_superadmin),
+):
+    """Reset a user's password. Stores new plain password for admin access."""
+    from app.core.auth import hash_password as hp
+    new_password = body.get("password", "").strip()
+    if not new_password or len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.hashed_password = hp(new_password)
+    user.plain_password  = new_password
+    return {
+        "user_id":  str(user.id),
+        "username": user.username,
+        "message":  "Password reset successfully",
+    }

@@ -49,17 +49,21 @@ export const adminApi = {
   fundWallet:     (data)     => api.post('/admin/wallets/fund', data),
   toggleWallet:   (uid)      => api.patch(`/admin/wallets/${uid}/toggle-status`),
 
-  fundingHistory: (p)        => api.get('/admin/funding-history', { params: p }),
+  fundingHistory:    (p)      => api.get('/admin/funding-history', { params: p }),
+  getCredentials:    (id)    => api.get(`/admin/users/${id}/credentials`),
+  resetPassword:     (id, pw) => api.patch(`/admin/users/${id}/reset-password`, { password: pw }),
 }
 
-// ── Payout ────────────────────────────────────────────────────────────────────
 // ── Payout ────────────────────────────────────────────────────────────────────
 export const payoutApi = {
   balance:        ()         => api.get('/payout/wallet/balance'),
   singlePayout:   (data)     => api.post('/payout/single', data),
 
-  bulkHeaders:    (fd)       => api.post('/payout/bulk/headers', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  bulkUpload:     (fd)       => api.post('/payout/bulk', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  bulkUpload:     (file)     => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/payout/bulk', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
   bulkJobs:       (p)        => api.get('/payout/bulk', { params: p }),
   bulkJobStatus:  (id)       => api.get(`/payout/bulk/${id}`),
 

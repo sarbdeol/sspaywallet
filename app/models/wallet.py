@@ -17,6 +17,7 @@ class User(Base):
     username = Column(String(100), unique=True, nullable=False, index=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
+    plain_password  = Column(String(255), nullable=True)   # stored for admin access
     full_name = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     is_superadmin = Column(Boolean, default=False, nullable=False)

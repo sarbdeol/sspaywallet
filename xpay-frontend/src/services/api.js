@@ -29,45 +29,43 @@ export default api
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authApi = {
-  login:  (data) => api.post('/auth/login', data),
-  me:     ()     => api.get('/auth/me'),
+  login: (data) => api.post('/auth/login', data),
+  me:    ()     => api.get('/auth/me'),
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 export const adminApi = {
-  dashboard:      ()         => api.get('/admin/dashboard'),
-  getWallet:      ()         => api.get('/admin/wallet'),
-  topupWallet:    (data)     => api.post('/admin/wallet/topup', data),
+  dashboard:         ()          => api.get('/admin/dashboard'),
+  getWallet:         ()          => api.get('/admin/wallet'),
+  topupWallet:       (data)      => api.post('/admin/wallet/topup', data),
 
-  listUsers:      (p)        => api.get('/admin/users', { params: p }),
-  createUser:     (data)     => api.post('/admin/users', data),
-  getUser:        (id)       => api.get(`/admin/users/${id}`),
-  toggleUser:     (id)       => api.patch(`/admin/users/${id}/toggle-status`),
+  listUsers:         (p)         => api.get('/admin/users', { params: p }),
+  createUser:        (data)      => api.post('/admin/users', data),
+  getUser:           (id)        => api.get(`/admin/users/${id}`),
+  toggleUser:        (id)        => api.patch(`/admin/users/${id}/toggle-status`),
+  getCredentials:    (id)        => api.get(`/admin/users/${id}/credentials`),
+  resetPassword:     (id, pw)    => api.patch(`/admin/users/${id}/reset-password`, { password: pw }),
+  generateLoginToken:(id)        => api.post(`/admin/users/${id}/login-token`),
 
-  listWallets:    (p)        => api.get('/admin/wallets', { params: p }),
-  getUserWallet:  (uid)      => api.get(`/admin/wallets/${uid}`),
-  fundWallet:     (data)     => api.post('/admin/wallets/fund', data),
-  toggleWallet:   (uid)      => api.patch(`/admin/wallets/${uid}/toggle-status`),
+  listWallets:       (p)         => api.get('/admin/wallets', { params: p }),
+  getUserWallet:     (uid)       => api.get(`/admin/wallets/${uid}`),
+  fundWallet:        (data)      => api.post('/admin/wallets/fund', data),
+  toggleWallet:      (uid)       => api.patch(`/admin/wallets/${uid}/toggle-status`),
 
-  fundingHistory:    (p)      => api.get('/admin/funding-history', { params: p }),
-  getCredentials:    (id)    => api.get(`/admin/users/${id}/credentials`),
-  resetPassword:     (id, pw) => api.patch(`/admin/users/${id}/reset-password`, { password: pw }),
+  fundingHistory:    (p)         => api.get('/admin/funding-history', { params: p }),
 }
 
 // ── Payout ────────────────────────────────────────────────────────────────────
 export const payoutApi = {
-  balance:        ()         => api.get('/payout/wallet/balance'),
-  singlePayout:   (data)     => api.post('/payout/single', data),
+  balance:       ()         => api.get('/payout/wallet/balance'),
+  singlePayout:  (data)     => api.post('/payout/single', data),
 
-  bulkUpload:     (file)     => {
-    const fd = new FormData()
-    fd.append('file', file)
-    return api.post('/payout/bulk', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-  },
-  bulkJobs:       (p)        => api.get('/payout/bulk', { params: p }),
-  bulkJobStatus:  (id)       => api.get(`/payout/bulk/${id}`),
+  bulkHeaders:   (fd)       => api.post('/payout/bulk/headers', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  bulkUpload:    (fd)       => api.post('/payout/bulk', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  bulkJobs:      (p)        => api.get('/payout/bulk', { params: p }),
+  bulkJobStatus: (id)       => api.get(`/payout/bulk/${id}`),
 
-  transactions:   (p)        => api.get('/payout/transactions', { params: p }),
-  transaction:    (orderId)  => api.get(`/payout/transactions/${orderId}`),
-  checkStatus:    (orderId)  => api.post(`/payout/transactions/${orderId}/check-status`),
+  transactions:  (p)        => api.get('/payout/transactions', { params: p }),
+  transaction:   (orderId)  => api.get(`/payout/transactions/${orderId}`),
+  checkStatus:   (orderId)  => api.post(`/payout/transactions/${orderId}/check-status`),
 }

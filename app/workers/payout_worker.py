@@ -4,6 +4,7 @@ from decimal import Decimal
 from datetime import datetime
 from celery import Celery
 from app.config import settings
+from app.services.xpaysafe import XpaySafeClient
 
 celery_app = Celery(
     "xpay_workers",
@@ -38,7 +39,8 @@ async def _async_process_bulk(job_id: str, wallet_id: str, rows: list):
     from sqlalchemy import select
     from app.models.transaction import BulkPayoutJob, BulkJobStatus, Transaction, TransactionStatus
     from app.models.wallet import SubWallet
-    from app.services.xpaysafe import xpaysafe_client
+    from app.services.xpaysafe import XpaySafeClient
+    xpaysafe_client = XpaySafeClient()
     from app.services.wallet_service import deduct_balance, refund_balance
 
     engine = create_async_engine(settings.DATABASE_URL, echo=False)

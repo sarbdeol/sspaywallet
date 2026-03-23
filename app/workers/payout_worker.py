@@ -4,7 +4,7 @@ from decimal import Decimal
 from datetime import datetime
 from celery import Celery
 from app.config import settings
-from app.services.xpaysafe import XpaySafeClient
+from app.services.xpaysafe import XpaySafeClient, _build_signature
 
 celery_app = Celery(
     "xpay_workers",
@@ -39,8 +39,19 @@ async def _async_process_bulk(job_id: str, wallet_id: str, rows: list):
     from sqlalchemy import select
     from app.models.transaction import BulkPayoutJob, BulkJobStatus, Transaction, TransactionStatus
     from app.models.wallet import SubWallet
-    from app.services.xpaysafe import XpaySafeClient
+    # Force fresh client with current settings
+    from app.services.xpaysafe import XpaySafeClient, _build_signature, _deep_sort
+    from app.config import settings as s
     xpaysafe_client = XpaySafeClient()
+
+    # DEBUG
+    import json, time
+    print(f"WORKER KEY: {s.XPAYSAFE_API_KEY[:20]}")
+    print(f"WORKER SECRET: {s.XPAYSAFE_API_SECRET[:20]}")
+    print(f"WORKER SALT: {s.XPAYSAFE_SALT[:20]}")
+    test_payload = {"amount": float(amount), "orderId": order_id, "currency": "INR", "beneficiary_details": {"account_number": row["account_number"], "bank_name": row.get("bank_name",""), "ifsc": row["ifsc"], "name": row["beneficiary_name"]}, "timestamp": int(time.time())}
+    print(f"WORKER PAYLOAD: {json.dumps(_deep_sort(test_payload), separators=(',',':'))}")
+    print(f"WORKER SIG: {_build_signature(test_payload)}")
     from app.services.wallet_service import deduct_balance, refund_balance
 
     engine = create_async_engine(settings.DATABASE_URL, echo=False)

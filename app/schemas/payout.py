@@ -12,7 +12,7 @@ class BeneficiaryDetails(BaseModel):
     name: str
     account_number: str
     ifsc: str
-    bank_name: Optional[str] = None
+    bank_name: str
 
 
 # ── Single payout ─────────────────────────────────────────────────────────────

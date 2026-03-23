@@ -5,8 +5,8 @@ import pandas as pd
 from fastapi import HTTPException
 
 
-REQUIRED_FIELDS = ["beneficiary_name", "account_number", "ifsc", "amount"]
-OPTIONAL_FIELDS = ["bank_name", "currency"]
+REQUIRED_FIELDS = ["beneficiary_name", "account_number", "ifsc", "bank_name", "amount"]
+OPTIONAL_FIELDS = ["currency"]
 ALL_FIELDS = REQUIRED_FIELDS + OPTIONAL_FIELDS
 
 
@@ -61,9 +61,13 @@ def parse_bulk_excel_with_mapping(
             "beneficiary_name": str(row.get(reverse.get("beneficiary_name", ""), "")).strip(),
             "account_number":   str(row.get(reverse.get("account_number",   ""), "")).strip(),
             "ifsc":             str(row.get(reverse.get("ifsc",             ""), "")).strip().upper(),
-            "bank_name":        str(row.get(reverse.get("bank_name",        ""), "")).strip() if "bank_name"  in reverse else "",
+            "bank_name":        str(row.get(reverse.get("bank_name",        ""), "")).strip() if "bank_name" in reverse else "",
             "currency":         str(row.get(reverse.get("currency",         ""), "INR")).strip().upper() if "currency" in reverse else "INR",
         }
+
+        # Validate bank_name
+        if not r["bank_name"] or r["bank_name"].lower() in ("nan", "none", ""):
+            r["error"] = "bank_name is required — please map the Bank Name column"
 
         # Validate amount
         raw_amount = row.get(reverse.get("amount", ""), None)

@@ -40,7 +40,7 @@ async def create_single_payout(
             beneficiary_name=beneficiary_name,
             account_number=account_number,
             ifsc=ifsc,
-            bank_name=bank_name or "",
+            bank_name=bank_name,
             order_id=order_id,
         )
         api_response = result["response"]

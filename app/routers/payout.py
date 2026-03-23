@@ -54,7 +54,7 @@ async def single_payout(
         beneficiary_name=body.beneficiary.name,
         account_number=body.beneficiary.account_number,
         ifsc=body.beneficiary.ifsc,
-        bank_name=body.beneficiary.bank_name or "",
+        bank_name=body.beneficiary.bank_name,
     )
     return txn
 

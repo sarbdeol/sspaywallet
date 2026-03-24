@@ -1,14 +1,10 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { Filter, RefreshCw, FileText, FileSpreadsheet } from "lucide-react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { RefreshCw, FileSpreadsheet } from "lucide-react";
 import toast from "react-hot-toast";
 import { payoutApi } from "../../services/api";
 import { Card, Table, Badge, PageHeader, Spinner } from "../../components/ui";
 import { fmt, extractError } from "../../utils/helpers";
-import {
-  downloadPDFReceipt,
-  downloadBulkJobExcel,
-  downloadSSpayExport,
-} from "../../utils/downloads";
+import { downloadSSpayExport } from "../../utils/downloads";
 
 const STATUS_OPTIONS = [
   "",
@@ -19,6 +15,339 @@ const STATUS_OPTIONS = [
   "REJECTED",
 ];
 
+// ── Receipt Image Modal ────────────────────────────────────────────────────────
+function ReceiptModal({ txn, onClose }) {
+  const receiptRef = useRef(null);
+  if (!txn) return null;
+
+  const statusColors = {
+    SUCCESS: "#10b981",
+    FAILED: "#ef4444",
+    PENDING: "#8b5cf6",
+    EXPIRED: "#f59e0b",
+    REJECTED: "#6b7280",
+  };
+  const color = statusColors[txn.status] || "#6b7280";
+
+  const handleSaveImage = async () => {
+    if (!receiptRef.current) return;
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(receiptRef.current, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+      });
+      const url = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `receipt-${txn.order_id}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success("Receipt saved!");
+    } catch (e) {
+      toast.error("Save failed");
+    }
+  };
+
+  const handleShare = async () => {
+    if (!receiptRef.current) return;
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(receiptRef.current, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+      });
+      canvas.toBlob(async (blob) => {
+        const file = new File([blob], `receipt-${txn.order_id}.png`, {
+          type: "image/png",
+        });
+        if (
+          navigator.share &&
+          navigator.canShare &&
+          navigator.canShare({ files: [file] })
+        ) {
+          await navigator.share({
+            files: [file],
+            title: `Receipt ${txn.order_id}`,
+          });
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `receipt-${txn.order_id}.png`;
+          a.click();
+          toast.success("Image saved! Share from gallery.");
+        }
+      }, "image/png");
+    } catch (e) {
+      toast.error("Share failed");
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 1000,
+        background: "rgba(0,0,0,.5)",
+        backdropFilter: "blur(2px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+      }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: 20,
+          width: "100%",
+          maxWidth: 400,
+          maxHeight: "90vh",
+          overflowY: "auto",
+          boxShadow: "0 20px 60px rgba(0,0,0,.25)",
+        }}
+      >
+        {/* Receipt content — captured by html2canvas */}
+        <div ref={receiptRef}>
+          {/* Header */}
+          <div
+            style={{
+              background: "#1a1a2e",
+              padding: "20px 24px",
+              borderRadius: "16px 16px 0 0",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <div
+                  style={{ color: "#fff", fontSize: 20, fontWeight: "bold" }}
+                >
+                  SSPay
+                </div>
+                <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 2 }}>
+                  Payment Receipt
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div
+                  style={{
+                    color: "#fff",
+                    fontSize: 12,
+                    fontFamily: "monospace",
+                  }}
+                >
+                  #{txn.order_id?.slice(-10)}
+                </div>
+                <div
+                  style={{
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: "bold",
+                    marginTop: 2,
+                  }}
+                >
+                  {txn.status}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Amount */}
+          <div
+            style={{
+              background: `${color}15`,
+              padding: "20px 24px",
+              textAlign: "center",
+              borderBottom: `1px solid ${color}30`,
+            }}
+          >
+            <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 6 }}>
+              Amount
+            </div>
+            <div style={{ color: "#111827", fontSize: 32, fontWeight: "bold" }}>
+              {fmt.currency(txn.amount, txn.currency)}
+            </div>
+          </div>
+
+          {/* UTR if available */}
+          {txn.utr && (
+            <div
+              style={{
+                background: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                margin: "16px 24px 0",
+                borderRadius: 10,
+                padding: "10px 14px",
+                textAlign: "center",
+              }}
+            >
+              <div style={{ color: "#065f46", fontSize: 11, marginBottom: 4 }}>
+                UTR / Reference
+              </div>
+              <div
+                style={{
+                  color: "#10b981",
+                  fontSize: 15,
+                  fontWeight: 700,
+                  fontFamily: "monospace",
+                }}
+              >
+                {txn.utr}
+              </div>
+            </div>
+          )}
+
+          {/* Details */}
+          <div style={{ padding: "16px 24px" }}>
+            {[
+              ["Order ID", txn.order_id],
+              ["Transaction ID", txn.transaction_id],
+              ["Beneficiary", txn.beneficiary_name],
+              ["Account No.", txn.account_number],
+              ["IFSC Code", txn.ifsc],
+              ["Bank", txn.bank_name],
+              ["Date", fmt.date(txn.created_at)],
+              txn.failure_reason ? ["Reason", txn.failure_reason] : null,
+            ]
+              .filter(Boolean)
+              .filter(([, v]) => v)
+              .map(([label, value]) => (
+                <div
+                  key={label}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    padding: "7px 0",
+                    borderBottom: "1px solid #f3f4f6",
+                    fontSize: 12,
+                  }}
+                >
+                  <span
+                    style={{ color: "#9ca3af", flexShrink: 0, marginRight: 12 }}
+                  >
+                    {label}
+                  </span>
+                  <span
+                    style={{
+                      color: label === "Reason" ? "#ef4444" : "#1f2937",
+                      fontWeight: 600,
+                      textAlign: "right",
+                      wordBreak: "break-all",
+                      fontFamily: [
+                        "Order ID",
+                        "Transaction ID",
+                        "Account No.",
+                        "IFSC Code",
+                        "UTR",
+                      ].includes(label)
+                        ? "monospace"
+                        : "inherit",
+                      fontSize: 11,
+                    }}
+                  >
+                    {value}
+                  </span>
+                </div>
+              ))}
+          </div>
+
+          {/* Footer */}
+          <div
+            style={{
+              padding: "12px 24px 20px",
+              textAlign: "center",
+              borderTop: "1px solid #f3f4f6",
+            }}
+          >
+            <div style={{ color: "#9ca3af", fontSize: 10 }}>
+              System generated receipt
+            </div>
+            <div style={{ color: "#9ca3af", fontSize: 10 }}>
+              © 2026 SSPay Wallet
+            </div>
+          </div>
+        </div>
+
+        {/* Action buttons — NOT captured */}
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            padding: 16,
+            borderTop: "1px solid #f3f4f6",
+          }}
+        >
+          <button
+            onClick={handleSaveImage}
+            style={{
+              flex: 1,
+              height: 44,
+              background: "#10b981",
+              color: "#fff",
+              border: "none",
+              borderRadius: 12,
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "DM Sans, sans-serif",
+            }}
+          >
+            Save Image
+          </button>
+          <button
+            onClick={handleShare}
+            style={{
+              flex: 1,
+              height: 44,
+              background: "#3b82f6",
+              color: "#fff",
+              border: "none",
+              borderRadius: 12,
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "DM Sans, sans-serif",
+            }}
+          >
+            Share
+          </button>
+          <button
+            onClick={onClose}
+            style={{
+              height: 44,
+              padding: "0 16px",
+              background: "#f3f4f6",
+              color: "#6b7280",
+              border: "none",
+              borderRadius: 12,
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "DM Sans, sans-serif",
+            }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Transactions Page ────────────────────────────────────────────────────
 export default function Transactions() {
   const [data, setData] = useState({
     items: [],
@@ -31,7 +360,7 @@ export default function Transactions() {
   const [status, setStatus] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [detail, setDetail] = useState(null);
+  const [receipt, setReceipt] = useState(null);
   const [checking, setChecking] = useState({});
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -103,13 +432,6 @@ export default function Transactions() {
             : t,
         ),
       }));
-      if (detail?.order_id === orderId) {
-        setDetail((prev) => ({
-          ...prev,
-          status: result.status,
-          utr: result.utr || prev.utr,
-        }));
-      }
     } catch (e) {
       toast.error(extractError(e));
     } finally {
@@ -117,11 +439,10 @@ export default function Transactions() {
     }
   }
 
-  // Fetch all pages matching current filters
   async function fetchAllFiltered() {
-    let allItems = [];
-    let currentPage = 1;
-    let total = 1;
+    let allItems = [],
+      currentPage = 1,
+      total = 1;
     do {
       const { data: result } = await payoutApi.transactions({
         page: currentPage,
@@ -137,15 +458,12 @@ export default function Transactions() {
     return allItems;
   }
 
-  // Export in SSpay bulk-clear format (.xlsx) — fill UTR and upload to SSpay
   async function handleExport() {
     setExporting(true);
     try {
       const items = await fetchAllFiltered();
       await downloadSSpayExport(items);
-      toast.success(
-        `Exported ${items.length} rows — fill UTR column and upload to SSpay`,
-      );
+      toast.success(`Exported ${items.length} rows`);
     } catch (e) {
       toast.error(extractError(e));
     } finally {
@@ -222,11 +540,6 @@ export default function Transactions() {
                 color: "#8b5cf6",
                 opacity: checking[r.order_id] ? 0.5 : 1,
               }}
-              onMouseEnter={(e) => {
-                if (!checking[r.order_id])
-                  e.currentTarget.style.background = "#f5f3ff";
-              }}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
             >
               {checking[r.order_id] ? (
                 <Spinner size={12} color="#8b5cf6" />
@@ -268,44 +581,24 @@ export default function Transactions() {
       title: "",
       align: "right",
       render: (_, row) => (
-        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-          <button
-            onClick={() => downloadPDFReceipt(row)}
-            title="Download Receipt"
-            style={{
-              fontSize: 12,
-              color: "#10b981",
-              background: "none",
-              border: "1px solid #e4e4e7",
-              cursor: "pointer",
-              padding: "4px 8px",
-              borderRadius: 6,
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "#f0fdf4")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-          >
-            <FileText size={12} /> Receipt
-          </button>
-          <button
-            onClick={() => setDetail(row)}
-            style={{
-              fontSize: 12,
-              color: "#0ea5e9",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              padding: "4px 8px",
-              borderRadius: 6,
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "#f0f9ff")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-          >
-            Details
-          </button>
-        </div>
+        <button
+          onClick={() => setReceipt(row)}
+          style={{
+            fontSize: 12,
+            color: "#10b981",
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            cursor: "pointer",
+            padding: "5px 12px",
+            borderRadius: 8,
+            fontFamily: "DM Sans, sans-serif",
+            fontWeight: 500,
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "#dcfce7")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "#f0fdf4")}
+        >
+          Receipt
+        </button>
       ),
     },
   ];
@@ -330,11 +623,9 @@ export default function Transactions() {
                 <Spinner size={12} color="#8b5cf6" /> Auto-refreshing…
               </div>
             )}
-            {/* Single Export button — SSpay bulk-clear format */}
             <button
               onClick={handleExport}
               disabled={exporting}
-              title="Export as SSpay bulk-clear .xlsx — fill UTR and upload to SSpay"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -355,7 +646,7 @@ export default function Transactions() {
               ) : (
                 <FileSpreadsheet size={13} />
               )}
-              Export for SSpay
+              Export
             </button>
             <button
               onClick={() => load(page, status, dateFrom, dateTo)}
@@ -410,7 +701,6 @@ export default function Transactions() {
             flexWrap: "wrap",
           }}
         >
-          {/* Status filter */}
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <label style={{ fontSize: 12, fontWeight: 500, color: "#6b7280" }}>
               Status
@@ -437,8 +727,6 @@ export default function Transactions() {
               ))}
             </select>
           </div>
-
-          {/* Date From */}
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <label style={{ fontSize: 12, fontWeight: 500, color: "#6b7280" }}>
               Date From
@@ -457,8 +745,6 @@ export default function Transactions() {
               }}
             />
           </div>
-
-          {/* Date To */}
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <label style={{ fontSize: 12, fontWeight: 500, color: "#6b7280" }}>
               Date To
@@ -477,8 +763,6 @@ export default function Transactions() {
               }}
             />
           </div>
-
-          {/* Apply / Clear */}
           <button
             onClick={applyFilters}
             style={{
@@ -511,36 +795,6 @@ export default function Transactions() {
             >
               Clear
             </button>
-          )}
-
-          {/* Active filter summary */}
-          {hasActiveFilters && (
-            <div
-              style={{
-                fontSize: 12,
-                color: "#6b7280",
-                padding: "4px 10px",
-                background: "#f9fafb",
-                borderRadius: 6,
-                border: "1px solid #e4e4e7",
-              }}
-            >
-              {status && (
-                <span style={{ marginRight: 8 }}>
-                  Status: <strong>{status}</strong>
-                </span>
-              )}
-              {dateFrom && (
-                <span style={{ marginRight: 8 }}>
-                  From: <strong>{dateFrom}</strong>
-                </span>
-              )}
-              {dateTo && (
-                <span>
-                  To: <strong>{dateTo}</strong>
-                </span>
-              )}
-            </div>
           )}
         </div>
       </Card>
@@ -615,166 +869,9 @@ export default function Transactions() {
         </div>
       )}
 
-      {/* Detail Modal */}
-      {detail && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,.35)",
-            backdropFilter: "blur(2px)",
-            zIndex: 1000,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 20,
-          }}
-          onClick={(e) => e.target === e.currentTarget && setDetail(null)}
-        >
-          <div
-            className="fade-in"
-            style={{
-              background: "#fff",
-              borderRadius: 16,
-              width: "100%",
-              maxWidth: 520,
-              boxShadow: "0 20px 60px rgba(0,0,0,.18)",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                padding: "18px 24px",
-                borderBottom: "1px solid #f0f0f0",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <span style={{ fontWeight: 600, fontSize: 16 }}>
-                Transaction Details
-              </span>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button
-                  onClick={() => downloadPDFReceipt(detail)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "6px 12px",
-                    borderRadius: 8,
-                    border: "1px solid #bbf7d0",
-                    background: "#f0fdf4",
-                    cursor: "pointer",
-                    fontSize: 13,
-                    color: "#065f46",
-                    fontFamily: "DM Sans, sans-serif",
-                  }}
-                >
-                  <FileText size={13} /> Receipt
-                </button>
-                {detail.status === "PENDING" && (
-                  <button
-                    onClick={() => checkStatus(detail.order_id)}
-                    disabled={checking[detail.order_id]}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      padding: "6px 12px",
-                      borderRadius: 8,
-                      border: "1px solid #ddd6fe",
-                      background: "#f5f3ff",
-                      cursor: "pointer",
-                      fontSize: 13,
-                      color: "#5b21b6",
-                      fontFamily: "DM Sans, sans-serif",
-                    }}
-                  >
-                    {checking[detail.order_id] ? (
-                      <Spinner size={12} color="#8b5cf6" />
-                    ) : (
-                      <RefreshCw size={12} />
-                    )}
-                    Check Status
-                  </button>
-                )}
-                <button
-                  onClick={() => setDetail(null)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    fontSize: 20,
-                    color: "#6b7280",
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-            <div style={{ padding: 24 }}>
-              <div
-                style={{
-                  marginBottom: 20,
-                  display: "flex",
-                  justifyContent: "center",
-                }}
-              >
-                <Badge status={detail.status} />
-              </div>
-              {[
-                ["Order ID", detail.order_id, true],
-                ["Transaction ID", detail.transaction_id, true],
-                ["Gateway Ref", detail.gateway_ref_id, true],
-                ["UTR", detail.utr, true],
-                ["Beneficiary", detail.beneficiary_name, false],
-                ["Account", detail.account_number, true],
-                ["IFSC", detail.ifsc, true],
-                ["Bank", detail.bank_name, false],
-                ["Amount", fmt.currency(detail.amount, detail.currency), false],
-                ["Created", fmt.date(detail.created_at), false],
-                ["Updated", fmt.date(detail.updated_at), false],
-                ["Failure Reason", detail.failure_reason, false],
-              ]
-                .filter(([, v]) => v)
-                .map(([k, v, mono]) => (
-                  <div
-                    key={k}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      padding: "9px 0",
-                      borderBottom: "1px solid #f9f9f9",
-                      fontSize: 13,
-                    }}
-                  >
-                    <span
-                      style={{
-                        color: "#6b7280",
-                        flexShrink: 0,
-                        marginRight: 16,
-                      }}
-                    >
-                      {k}
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: mono ? "DM Mono, monospace" : "inherit",
-                        fontWeight: 500,
-                        textAlign: "right",
-                        wordBreak: "break-all",
-                        color: k === "Failure Reason" ? "#ef4444" : "#111827",
-                      }}
-                    >
-                      {v}
-                    </span>
-                  </div>
-                ))}
-            </div>
-          </div>
-        </div>
+      {/* Receipt Modal */}
+      {receipt && (
+        <ReceiptModal txn={receipt} onClose={() => setReceipt(null)} />
       )}
     </div>
   );

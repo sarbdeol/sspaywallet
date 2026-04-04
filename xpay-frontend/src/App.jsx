@@ -38,6 +38,7 @@ export default function App() {
       <Route path="/admin/users"   element={<AdminRoute><AdminUsers /></AdminRoute>} />
       <Route path="/admin/wallets" element={<AdminRoute><AdminWallets /></AdminRoute>} />
       <Route path="/admin/funding" element={<AdminRoute><FundingHistory /></AdminRoute>} />
+      <Route path="/admin/ledger" element={<AdminRoute><AdminLedger /></AdminRoute>} />
 
       {/* User */}
       <Route path="/dashboard"      element={<ProtectedRoute><UserDashboard /></ProtectedRoute>} />

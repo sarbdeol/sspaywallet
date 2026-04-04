@@ -115,6 +115,7 @@ export default function AdminDashboard() {
               { label: 'Fund a Wallet',      href: '/admin/wallets', color: '#10b981' },
               { label: 'View All Wallets',   href: '/admin/wallets', color: '#8b5cf6' },
               { label: 'Funding History',    href: '/admin/funding', color: '#f59e0b' },
+              { label: 'User Ledgers', href: '/admin/ledger', color: '#f59e0b' }
             ].map(({ label, href, color }) => (
               <a key={label} href={href}
                 style={{

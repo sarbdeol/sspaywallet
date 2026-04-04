@@ -77,7 +77,7 @@ xpay-frontend/.vite/
 ehthumbs.db
 Thumbs.db
 desktop.ini
-
+node_modules/
 # ── IDE ───────────────────────────────────────────────────────────────────────
 .vscode/
 .idea/

@@ -307,3 +307,88 @@ async def reset_user_password(
         "username": user.username,
         "message":  "Password reset successfully",
     }
+
+
+
+
+# ── Admin Ledger ──────────────────────────────────────────────────────────────
+
+@router.get("/ledger/{user_id}/transactions")
+async def get_user_ledger(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_superadmin),
+    page: int = 1,
+    page_size: int = 20,
+    status: str = None,
+    date_from: str = None,
+    date_to: str = None,
+):
+    """Admin: fetch all transactions for a specific user's wallet."""
+    from datetime import timedelta
+
+    # Get wallet by user_id
+    wallet_result = await db.execute(
+        select(SubWallet).where(SubWallet.user_id == user_id)
+    )
+    wallet = wallet_result.scalar_one_or_none()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found for this user")
+
+    query = select(Transaction).where(Transaction.wallet_id == wallet.id)
+    count_query = select(func.count()).select_from(Transaction).where(Transaction.wallet_id == wallet.id)
+
+    if status:
+        query = query.where(Transaction.status == status)
+        count_query = count_query.where(Transaction.status == status)
+
+    if date_from:
+        try:
+            from datetime import datetime
+            df = datetime.strptime(date_from, "%Y-%m-%d")
+            query = query.where(Transaction.created_at >= df)
+            count_query = count_query.where(Transaction.created_at >= df)
+        except ValueError:
+            pass
+
+    if date_to:
+        try:
+            from datetime import datetime
+            dt = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+            query = query.where(Transaction.created_at < dt)
+            count_query = count_query.where(Transaction.created_at < dt)
+        except ValueError:
+            pass
+
+    query = query.order_by(Transaction.created_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
+
+    items_result = await db.execute(query)
+    count_result = await db.execute(count_query)
+    txns = items_result.scalars().all()
+    total = count_result.scalar()
+
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [
+            {
+                "order_id":        t.order_id,
+                "transaction_id":  t.transaction_id,
+                "gateway_ref_id":  t.gateway_ref_id,
+                "utr":             t.utr,
+                "amount":          float(t.amount),
+                "currency":        t.currency,
+                "beneficiary_name":t.beneficiary_name,
+                "account_number":  t.account_number,
+                "ifsc":            t.ifsc,
+                "bank_name":       t.bank_name,
+                "status":          t.status,
+                "failure_reason":  t.failure_reason,
+                "created_at":      t.created_at.isoformat(),
+                "updated_at":      t.updated_at.isoformat() if t.updated_at else None,
+            }
+            for t in txns
+        ],
+    }

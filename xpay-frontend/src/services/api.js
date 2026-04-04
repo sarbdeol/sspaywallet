@@ -53,6 +53,7 @@ export const adminApi = {
   toggleWallet:      (uid)       => api.patch(`/admin/wallets/${uid}/toggle-status`),
 
   fundingHistory:    (p)         => api.get('/admin/funding-history', { params: p }),
+  userLedger:        (uid, p)    => api.get(`/admin/ledger/${uid}/transactions`, { params: p }),
 }
 
 // ── Payout ────────────────────────────────────────────────────────────────────
@@ -68,5 +69,4 @@ export const payoutApi = {
   transactions:  (p)        => api.get('/payout/transactions', { params: p }),
   transaction:   (orderId)  => api.get(`/payout/transactions/${orderId}`),
   checkStatus:   (orderId)  => api.post(`/payout/transactions/${orderId}/check-status`),
-  userLedger: (uid, p) => api.get(`/admin/ledger/${uid}/transactions`, { params: p }),
 }

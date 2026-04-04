@@ -1,4 +1,5 @@
 import uuid
+import secrets
 from datetime import datetime
 from decimal import Decimal
 from sqlalchemy import (
@@ -50,6 +51,11 @@ class SuperAdminWallet(Base):
         return f"<SuperAdminWallet balance={self.balance} {self.currency}>"
 
 
+def _generate_api_key() -> str:
+    """Generate a secure API key: xpay_sk_<48 hex chars>"""
+    return f"xpay_sk_{secrets.token_hex(24)}"
+
+
 class SubWallet(Base):
     """One wallet per user. Funded by super admin, used for payouts."""
     __tablename__ = "sub_wallets"
@@ -62,6 +68,11 @@ class SubWallet(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # ── API access fields (NEW) ───────────────────────────────────────────────
+    api_key = Column(String(100), unique=True, nullable=True, index=True, default=_generate_api_key)
+    webhook_url = Column(String(500), nullable=True)   # user's callback URL for payout events
+    api_enabled = Column(Boolean, default=True, nullable=False)
+
     # Relationships
     user = relationship("User", back_populates="wallet")
     transactions = relationship("Transaction", back_populates="wallet", order_by="Transaction.created_at.desc()")
@@ -69,6 +80,7 @@ class SubWallet(Base):
 
     __table_args__ = (
         Index("ix_sub_wallets_user_id", "user_id"),
+        Index("ix_sub_wallets_api_key", "api_key"),
     )
 
     def __repr__(self):

@@ -1,10 +1,12 @@
+import secrets
 from decimal import Decimal
 from uuid import UUID
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.core.auth import require_superadmin, hash_password
@@ -30,7 +32,6 @@ async def dashboard(
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_superadmin),
 ):
-    """Super admin overview: balances + counts."""
     admin_wallet = await get_or_create_super_admin_wallet(db)
 
     total_users = await db.execute(
@@ -42,11 +43,11 @@ async def dashboard(
     total_txns = await db.execute(select(func.count()).select_from(Transaction))
 
     return {
-        "admin_wallet_balance": float(admin_wallet.balance),
-        "currency": admin_wallet.currency,
-        "total_users": total_users.scalar(),
+        "admin_wallet_balance":     float(admin_wallet.balance),
+        "currency":                 admin_wallet.currency,
+        "total_users":              total_users.scalar(),
         "total_sub_wallet_balance": float(total_sub_balance.scalar()),
-        "total_transactions": total_txns.scalar(),
+        "total_transactions":       total_txns.scalar(),
     }
 
 
@@ -67,7 +68,6 @@ async def topup_master_wallet(
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_superadmin),
 ):
-    """Manually credit the master wallet (e.g. from bank deposit)."""
     wallet = await topup_admin_wallet(db, body.amount, body.note)
     return wallet
 
@@ -80,8 +80,6 @@ async def create_user(
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_superadmin),
 ):
-    """Admin creates a new user + auto-creates their sub-wallet."""
-    # Check uniqueness
     existing = await db.execute(
         select(User).where((User.username == body.username) | (User.email == body.email))
     )
@@ -99,7 +97,7 @@ async def create_user(
     db.add(user)
     await db.flush()
 
-    # Auto-create sub-wallet
+    # Auto-create sub-wallet with API key
     wallet = SubWallet(user_id=user.id, balance=Decimal("0.00"), currency="INR")
     db.add(wallet)
     await db.flush()
@@ -176,7 +174,6 @@ async def fund_user_wallet(
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_superadmin),
 ):
-    """Transfer funds from super admin wallet to a user's sub-wallet."""
     funding_tx = await fund_sub_wallet(
         db,
         user_id=body.user_id,
@@ -217,14 +214,75 @@ async def toggle_wallet_status(
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_superadmin),
 ):
-    result = await db.execute(
-        select(SubWallet).where(SubWallet.user_id == user_id)
-    )
+    result = await db.execute(select(SubWallet).where(SubWallet.user_id == user_id))
     wallet = result.scalar_one_or_none()
     if not wallet:
         raise HTTPException(status_code=404, detail="Wallet not found")
     wallet.is_active = not wallet.is_active
     return {"wallet_id": str(wallet.id), "is_active": wallet.is_active}
+
+
+# ── API Key Management (Admin) ────────────────────────────────────────────────
+
+@router.get("/wallets/{user_id}/api-info")
+async def get_api_info(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_superadmin),
+):
+    """Get API key info for a user's wallet."""
+    result = await db.execute(select(SubWallet).where(SubWallet.user_id == user_id))
+    wallet = result.scalar_one_or_none()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+    return {
+        "wallet_id":   str(wallet.id),
+        "api_key":     wallet.api_key,
+        "api_enabled": wallet.api_enabled,
+        "webhook_url": wallet.webhook_url,
+    }
+
+
+@router.patch("/wallets/{user_id}/regenerate-api-key")
+async def regenerate_api_key(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_superadmin),
+):
+    """Regenerate API key for a user. Old key stops working immediately."""
+    result = await db.execute(select(SubWallet).where(SubWallet.user_id == user_id))
+    wallet = result.scalar_one_or_none()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+
+    wallet.api_key = f"xpay_sk_{secrets.token_hex(24)}"
+    await db.flush()
+
+    return {
+        "success":     True,
+        "new_api_key": wallet.api_key,
+        "message":     "API key regenerated. Old key is now invalid.",
+    }
+
+
+@router.patch("/wallets/{user_id}/toggle-api-access")
+async def toggle_api_access(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_superadmin),
+):
+    """Enable or disable API access for a user."""
+    result = await db.execute(select(SubWallet).where(SubWallet.user_id == user_id))
+    wallet = result.scalar_one_or_none()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+
+    wallet.api_enabled = not wallet.api_enabled
+    return {
+        "success":     True,
+        "api_enabled": wallet.api_enabled,
+        "message":     f"API access {'enabled' if wallet.api_enabled else 'disabled'}",
+    }
 
 
 # ── Funding History ───────────────────────────────────────────────────────────
@@ -245,16 +303,16 @@ async def funding_history(
     rows = result.scalars().all()
     return [
         {
-            "id": str(r.id),
-            "sub_wallet_id": str(r.sub_wallet_id),
-            "amount": float(r.amount),
-            "currency": r.currency,
-            "note": r.note,
+            "id":                   str(r.id),
+            "sub_wallet_id":        str(r.sub_wallet_id),
+            "amount":               float(r.amount),
+            "currency":             r.currency,
+            "note":                 r.note,
             "admin_balance_before": float(r.admin_wallet_balance_before),
-            "admin_balance_after": float(r.admin_wallet_balance_after),
-            "sub_balance_before": float(r.sub_wallet_balance_before),
-            "sub_balance_after": float(r.sub_wallet_balance_after),
-            "created_at": r.created_at.isoformat(),
+            "admin_balance_after":  float(r.admin_wallet_balance_after),
+            "sub_balance_before":   float(r.sub_wallet_balance_before),
+            "sub_balance_after":    float(r.sub_wallet_balance_after),
+            "created_at":           r.created_at.isoformat(),
         }
         for r in rows
     ]
@@ -268,7 +326,6 @@ async def get_user_credentials(
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_superadmin),
 ):
-    """Get stored plain credentials for a user."""
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -289,7 +346,6 @@ async def reset_user_password(
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_superadmin),
 ):
-    """Reset a user's password. Stores new plain password for admin access."""
     from app.core.auth import hash_password as hp
     new_password = body.get("password", "").strip()
     if not new_password or len(new_password) < 6:
@@ -302,13 +358,7 @@ async def reset_user_password(
 
     user.hashed_password = hp(new_password)
     user.plain_password  = new_password
-    return {
-        "user_id":  str(user.id),
-        "username": user.username,
-        "message":  "Password reset successfully",
-    }
-
-
+    return {"user_id": str(user.id), "username": user.username, "message": "Password reset successfully"}
 
 
 # ── Admin Ledger ──────────────────────────────────────────────────────────────
@@ -324,13 +374,9 @@ async def get_user_ledger(
     date_from: str = None,
     date_to: str = None,
 ):
-    """Admin: fetch all transactions for a specific user's wallet."""
-    from datetime import timedelta
+    from datetime import timedelta, datetime
 
-    # Get wallet by user_id
-    wallet_result = await db.execute(
-        select(SubWallet).where(SubWallet.user_id == user_id)
-    )
+    wallet_result = await db.execute(select(SubWallet).where(SubWallet.user_id == user_id))
     wallet = wallet_result.scalar_one_or_none()
     if not wallet:
         raise HTTPException(status_code=404, detail="Wallet not found for this user")
@@ -344,7 +390,6 @@ async def get_user_ledger(
 
     if date_from:
         try:
-            from datetime import datetime
             df = datetime.strptime(date_from, "%Y-%m-%d")
             query = query.where(Transaction.created_at >= df)
             count_query = count_query.where(Transaction.created_at >= df)
@@ -353,7 +398,6 @@ async def get_user_ledger(
 
     if date_to:
         try:
-            from datetime import datetime
             dt = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
             query = query.where(Transaction.created_at < dt)
             count_query = count_query.where(Transaction.created_at < dt)
@@ -365,29 +409,28 @@ async def get_user_ledger(
 
     items_result = await db.execute(query)
     count_result = await db.execute(count_query)
-    txns = items_result.scalars().all()
-    total = count_result.scalar()
+    txns         = items_result.scalars().all()
 
     return {
-        "total": total,
-        "page": page,
+        "total":     count_result.scalar(),
+        "page":      page,
         "page_size": page_size,
         "items": [
             {
-                "order_id":        t.order_id,
-                "transaction_id":  t.transaction_id,
-                "gateway_ref_id":  t.gateway_ref_id,
-                "utr":             t.utr,
-                "amount":          float(t.amount),
-                "currency":        t.currency,
-                "beneficiary_name":t.beneficiary_name,
-                "account_number":  t.account_number,
-                "ifsc":            t.ifsc,
-                "bank_name":       t.bank_name,
-                "status":          t.status,
-                "failure_reason":  t.failure_reason,
-                "created_at":      t.created_at.isoformat(),
-                "updated_at":      t.updated_at.isoformat() if t.updated_at else None,
+                "order_id":         t.order_id,
+                "transaction_id":   t.transaction_id,
+                "gateway_ref_id":   t.gateway_ref_id,
+                "utr":              t.utr,
+                "amount":           float(t.amount),
+                "currency":         t.currency,
+                "beneficiary_name": t.beneficiary_name,
+                "account_number":   t.account_number,
+                "ifsc":             t.ifsc,
+                "bank_name":        t.bank_name,
+                "status":           t.status,
+                "failure_reason":   t.failure_reason,
+                "created_at":       t.created_at.isoformat(),
+                "updated_at":       t.updated_at.isoformat() if t.updated_at else None,
             }
             for t in txns
         ],

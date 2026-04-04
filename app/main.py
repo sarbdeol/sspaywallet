@@ -6,21 +6,21 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.database import create_tables
 from app.routers import auth, admin, payout, webhook
+from app.routers.public_api import router as public_api_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: create DB tables
     await create_tables()
     yield
-    # Shutdown: nothing extra needed
 
 
 app = FastAPI(
     title="XPay Wallet System",
     description=(
         "Super admin wallet + sub-wallet management system. "
-        "Supports single & bulk payouts via xpaysafe API."
+        "Supports single & bulk payouts via xpaysafe API. "
+        "Public API available for programmatic payout integration."
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -28,20 +28,21 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# ── CORS ─────────────────────────────────────────────────────────────────────
+# ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict in production to your frontend domain
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(auth.router,    prefix="/api/v1")
-app.include_router(admin.router,   prefix="/api/v1")
-app.include_router(payout.router,  prefix="/api/v1")
-app.include_router(webhook.router, prefix="/api/v1")
+app.include_router(auth.router,         prefix="/api/v1")
+app.include_router(admin.router,        prefix="/api/v1")
+app.include_router(payout.router,       prefix="/api/v1")
+app.include_router(webhook.router,      prefix="/api/v1")
+app.include_router(public_api_router,   prefix="/api/v1")  # NEW: public API
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

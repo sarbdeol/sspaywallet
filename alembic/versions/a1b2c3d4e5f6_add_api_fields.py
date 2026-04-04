@@ -18,26 +18,26 @@ depends_on = None
 
 def upgrade() -> None:
     # Add new columns to sub_wallets
-    op.add_column('sub_wallets', sa.Column('api_key',     sa.String(100), nullable=True, unique=True))
+    op.add_column('sub_wallets', sa.Column('api_key',     sa.String(100), nullable=True))
     op.add_column('sub_wallets', sa.Column('webhook_url', sa.String(500), nullable=True))
     op.add_column('sub_wallets', sa.Column('api_enabled', sa.Boolean(), nullable=False, server_default='true'))
 
-    # Create index on api_key for fast lookups
-    op.create_index('ix_sub_wallets_api_key', 'sub_wallets', ['api_key'], unique=True)
-
-    # Generate unique API keys for all existing wallets
+    # Generate unique API keys for all existing wallets using md5 (no extension needed)
     op.execute("""
         UPDATE sub_wallets
-        SET api_key = 'xpay_sk_' || encode(gen_random_bytes(24), 'hex')
+        SET api_key = 'xpay_sk_' || md5(random()::text || id::text || clock_timestamp()::text)
         WHERE api_key IS NULL
     """)
 
-    # Now make api_key not nullable
+    # Now make api_key not nullable and add unique constraint + index
     op.alter_column('sub_wallets', 'api_key', nullable=False)
+    op.create_unique_constraint('uq_sub_wallets_api_key', 'sub_wallets', ['api_key'])
+    op.create_index('ix_sub_wallets_api_key', 'sub_wallets', ['api_key'], unique=True)
 
 
 def downgrade() -> None:
     op.drop_index('ix_sub_wallets_api_key', table_name='sub_wallets')
+    op.drop_constraint('uq_sub_wallets_api_key', 'sub_wallets', type_='unique')
     op.drop_column('sub_wallets', 'api_enabled')
     op.drop_column('sub_wallets', 'webhook_url')
     op.drop_column('sub_wallets', 'api_key')

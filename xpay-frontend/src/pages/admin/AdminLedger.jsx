@@ -97,41 +97,30 @@ export default function AdminLedger() {
   const pendingCnt  = txns.filter((t) => t.status === "PENDING").length;
   const failedCnt   = txns.filter((t) => t.status === "FAILED").length;
 
-  // ── PDF Export ──────────────────────────────────────────────────────────────
+  // ── PDF ─────────────────────────────────────────────────────────────────────
   function exportPDF() {
     if (!txns.length) { toast.error("No transactions to export"); return; }
     const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
     const W = doc.internal.pageSize.getWidth();
 
-    // Dark header
     doc.setFillColor(26, 26, 46);
     doc.rect(0, 0, W, 22, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
-    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(255, 255, 255);
     doc.text("SSPay Wallet — User Ledger", 14, 14);
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8); doc.setFont("helvetica", "normal");
     doc.text(`Generated: ${new Date().toLocaleString("en-IN")}`, W - 14, 14, { align: "right" });
 
-    // Info block
-    doc.setTextColor(40, 40, 40);
-    doc.setFontSize(9);
+    doc.setTextColor(40, 40, 40); doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
-    doc.text("User:", 14, 30);
-    doc.text("Wallet Balance:", 100, 30);
-    doc.text("Success Total:", 100, 37);
+    doc.text("User:", 14, 30); doc.text("Wallet Balance:", 100, 30); doc.text("Success Total:", 100, 37);
     if (dateFrom || dateTo) doc.text("Period:", 14, 37);
-
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(70, 70, 70);
+    doc.setFont("helvetica", "normal"); doc.setTextColor(70, 70, 70);
     doc.text(`${selUser.full_name || selUser.username}  (${selUser.email})`, 28, 30);
     doc.text(`Rs. ${parseFloat(wallet?.balance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 132, 30);
     doc.text(`Rs. ${successAmt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 132, 37);
     if (dateFrom || dateTo) doc.text(`${dateFrom || "—"}  to  ${dateTo || "—"}`, 28, 37);
 
-    doc.setDrawColor(220, 220, 220);
-    doc.line(14, 41, W - 14, 41);
+    doc.setDrawColor(220, 220, 220); doc.line(14, 41, W - 14, 41);
 
     autoTable(doc, {
       startY: 45,
@@ -176,24 +165,19 @@ export default function AdminLedger() {
       },
     });
 
-    // Page footer
     const pages = doc.internal.getNumberOfPages();
     for (let i = 1; i <= pages; i++) {
-      doc.setPage(i);
-      doc.setFontSize(7); doc.setTextColor(160, 160, 160);
+      doc.setPage(i); doc.setFontSize(7); doc.setTextColor(160, 160, 160);
       doc.text(`SSPay Wallet  |  Page ${i} of ${pages}  |  Confidential`, W / 2, doc.internal.pageSize.getHeight() - 5, { align: "center" });
     }
-
     doc.save(`sspay_ledger_${selUser.username}_${new Date().toISOString().slice(0, 10)}.pdf`);
     toast.success("PDF downloaded");
   }
 
-  // ── Excel Export ─────────────────────────────────────────────────────────────
+  // ── Excel ────────────────────────────────────────────────────────────────────
   function exportExcel() {
     if (!txns.length) { toast.error("No transactions to export"); return; }
     const wb = XLSX.utils.book_new();
-
-    // Transactions only — no email/user info block
     const headers = ["#", "Date", "Order ID", "Beneficiary", "Account No", "IFSC", "Bank", "Amount (Rs.)", "Status", "UTR"];
     const rows = txns.map((t, i) => [
       i + 1 + (page - 1) * PAGE_SIZE,
@@ -207,36 +191,21 @@ export default function AdminLedger() {
       t.status,
       t.utr || "—",
     ]);
-
-    // Total rows at bottom
-    const blankRow  = ["", "", "", "", "", "", "", "", "", ""];
-    const totalRow  = ["", "", "", "", "", "", "Total (all)",    totalAmt,   "", ""];
-    const successRow= ["", "", "", "", "", "", "Success Total",  successAmt, "", ""];
-
+    const blankRow   = ["", "", "", "", "", "", "", "", "", ""];
+    const totalRow   = ["", "", "", "", "", "", "Total (all)",   totalAmt,   "", ""];
+    const successRow = ["", "", "", "", "", "", "Success Total", successAmt, "", ""];
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows, blankRow, totalRow, successRow]);
-
-    // Column widths
     ws["!cols"] = [6, 20, 36, 28, 18, 14, 24, 16, 12, 22].map((w) => ({ wch: w }));
-
-    // Bold the total rows
-    const totalRowIdx  = rows.length + 2; // 1-indexed + header + blank
-    const successRowIdx= rows.length + 3;
-    ["G","H"].forEach((col) => {
-      [`${col}${totalRowIdx}`, `${col}${successRowIdx}`].forEach((cell) => {
-        if (ws[cell]) ws[cell].s = { font: { bold: true } };
-      });
-    });
-
     XLSX.utils.book_append_sheet(wb, ws, `${selUser.username} Ledger`);
     XLSX.writeFile(wb, `sspay_ledger_${selUser.username}_${new Date().toISOString().slice(0, 10)}.xlsx`);
     toast.success("Excel downloaded");
   }
 
   return (
-    <div style={{ display: "flex", gap: 20, alignItems: "flex-start", fontFamily: "DM Sans, sans-serif" }}>
+    <div style={{ display: "flex", gap: 20, alignItems: "stretch", fontFamily: "DM Sans, sans-serif" }}>
 
-      {/* LEFT: User list */}
-      <div style={{ width: 260, flexShrink: 0, background: "#fff", borderRadius: 14, border: "1px solid #e4e4e7", overflow: "hidden" }}>
+      {/* ── LEFT: User list ── */}
+      <div style={{ width: 260, flexShrink: 0, background: "#fff", borderRadius: 14, border: "1px solid #e4e4e7", overflow: "hidden", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "14px 16px", borderBottom: "1px solid #f0f0f0" }}>
           <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>Users</div>
           <div style={{ position: "relative" }}>
@@ -245,7 +214,7 @@ export default function AdminLedger() {
               style={{ width: "100%", padding: "7px 10px 7px 28px", fontSize: 13, border: "1px solid #e4e4e7", borderRadius: 8, outline: "none", fontFamily: "DM Sans, sans-serif", boxSizing: "border-box" }} />
           </div>
         </div>
-        <div style={{ maxHeight: "calc(100vh - 220px)", overflowY: "auto" }}>
+        <div style={{ flex: 1, overflowY: "auto" }}>
           {loadingUsers ? (
             <div style={{ padding: 24, display: "flex", justifyContent: "center" }}><Spinner /></div>
           ) : filteredUsers.length === 0 ? (
@@ -265,8 +234,8 @@ export default function AdminLedger() {
         </div>
       </div>
 
-      {/* RIGHT: Ledger */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      {/* ── RIGHT: Ledger ── */}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         <PageHeader
           title={selUser ? `Ledger — ${selUser.full_name || selUser.username}` : "Ledger"}
           subtitle={selUser ? selUser.email : "Select a user to view their ledger"}
@@ -285,7 +254,7 @@ export default function AdminLedger() {
         />
 
         {!selUser ? (
-          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e4e4e7", padding: 60, textAlign: "center" }}>
+          <div style={{ flex: 1, background: "#fff", borderRadius: 14, border: "1px solid #e4e4e7", padding: 60, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
             <BookOpen size={40} color="#e4e4e7" style={{ marginBottom: 14 }} />
             <div style={{ fontWeight: 600, fontSize: 15, color: "#374151", marginBottom: 6 }}>Select a user</div>
             <div style={{ fontSize: 13, color: "#9ca3af" }}>Choose a user from the left panel to view their ledger</div>
@@ -293,7 +262,7 @@ export default function AdminLedger() {
         ) : (
           <>
             {/* Stats */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14, marginBottom: 20 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(155px, 1fr))", gap: 14, marginBottom: 20 }}>
               {[
                 { label: "Wallet Balance", value: fmtINR(wallet?.balance), color: "#0ea5e9" },
                 { label: "Success Total",  value: fmtINR(successAmt),      color: "#10b981" },
@@ -338,28 +307,18 @@ export default function AdminLedger() {
             </div>
 
             {/* Table */}
-            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e4e4e7", overflow: "hidden" }}>
+            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e4e4e7", overflow: "hidden", flex: 1 }}>
               {loadingTxns ? (
                 <div style={{ padding: 60, display: "flex", justifyContent: "center" }}><Spinner size={28} /></div>
               ) : txns.length === 0 ? (
                 <div style={{ padding: 60, textAlign: "center", color: "#9ca3af", fontSize: 14 }}>No transactions found</div>
               ) : (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, tableLayout: "fixed" }}>
+                <div style={{ overflowX: "auto", width: "100%" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: "#f9fafb", borderBottom: "1px solid #e4e4e7" }}>
-                        {[
-                          { label: "#",           w: 44  },
-                          { label: "Date",         w: 140 },
-                          { label: "Order ID",     w: 170 },
-                          { label: "Beneficiary",  w: 130 },
-                          { label: "Account",      w: 120 },
-                          { label: "Bank",         w: 150 },
-                          { label: "Amount",       w: 110 },
-                          { label: "Status",       w: 90  },
-                          { label: "UTR",          w: 120 },
-                        ].map(({ label, w }) => (
-                          <th key={label} style={{ width: w, padding: "10px 14px", textAlign: label === "Amount" ? "right" : "left", fontWeight: 600, fontSize: 12, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden" }}>{label}</th>
+                        {["#", "Date", "Order ID", "Beneficiary", "Account", "Bank", "Amount", "Status", "UTR"].map((h) => (
+                          <th key={h} style={{ padding: "10px 14px", textAlign: h === "Amount" ? "right" : "left", fontWeight: 600, fontSize: 12, color: "#6b7280", whiteSpace: "nowrap" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -370,29 +329,29 @@ export default function AdminLedger() {
                           onMouseEnter={(e) => (e.currentTarget.style.background = "#f0f9ff")}
                           onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
                         >
-                          <td style={{ padding: "11px 14px", color: "#9ca3af", fontSize: 12, overflow: "hidden" }}>{i + 1 + (page - 1) * PAGE_SIZE}</td>
-                          <td style={{ padding: "11px 14px", color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fmt.date(t.created_at)}</td>
-                          <td style={{ padding: "11px 14px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <td style={{ padding: "11px 14px", color: "#9ca3af", fontSize: 12, whiteSpace: "nowrap" }}>{i + 1 + (page - 1) * PAGE_SIZE}</td>
+                          <td style={{ padding: "11px 14px", color: "#6b7280", whiteSpace: "nowrap", fontSize: 12 }}>{fmt.date(t.created_at)}</td>
+                          <td style={{ padding: "11px 14px", whiteSpace: "nowrap" }}>
                             <span style={{ fontFamily: "DM Mono, monospace", fontSize: 12, color: "#374151" }}>{t.order_id}</span>
                           </td>
-                          <td style={{ padding: "11px 14px", fontWeight: 500, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.beneficiary_name}</td>
-                          <td style={{ padding: "11px 14px", fontFamily: "DM Mono, monospace", fontSize: 12, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.account_number}</td>
-                          <td style={{ padding: "11px 14px", color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.bank_name || "—"}>{t.bank_name || "—"}</td>
+                          <td style={{ padding: "11px 14px", fontWeight: 500, color: "#111827", whiteSpace: "nowrap", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis" }}>{t.beneficiary_name}</td>
+                          <td style={{ padding: "11px 14px", fontFamily: "DM Mono, monospace", fontSize: 12, color: "#6b7280", whiteSpace: "nowrap" }}>{t.account_number}</td>
+                          <td style={{ padding: "11px 14px", color: "#6b7280", whiteSpace: "nowrap", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis" }} title={t.bank_name || "—"}>{t.bank_name || "—"}</td>
                           <td style={{ padding: "11px 14px", textAlign: "right", fontFamily: "DM Mono, monospace", fontWeight: 600, color: "#111827", whiteSpace: "nowrap" }}>{fmtINR(t.amount)}</td>
-                          <td style={{ padding: "11px 14px" }}>{statusBadge(t.status)}</td>
-                          <td style={{ padding: "11px 14px", fontFamily: "DM Mono, monospace", fontSize: 12, color: "#9ca3af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.utr || "—"}</td>
+                          <td style={{ padding: "11px 14px", whiteSpace: "nowrap" }}>{statusBadge(t.status)}</td>
+                          <td style={{ padding: "11px 14px", fontFamily: "DM Mono, monospace", fontSize: 12, color: "#9ca3af", whiteSpace: "nowrap" }}>{t.utr || "—"}</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr style={{ background: "#f0fdf4", borderTop: "2px solid #e4e4e7" }}>
-                        <td colSpan={6} style={{ padding: "11px 14px", fontWeight: 600, fontSize: 13, color: "#374151" }}>
+                      <tr style={{ background: "#f0fdf4", borderTop: "2px solid #d1fae5" }}>
+                        <td colSpan={6} style={{ padding: "12px 14px", fontWeight: 600, fontSize: 13, color: "#374151" }}>
                           Success total ({successTxns.length} of {txns.length} transactions)
                         </td>
-                        <td style={{ padding: "11px 14px", textAlign: "right", fontFamily: "DM Mono, monospace", fontWeight: 700, fontSize: 15, color: "#10b981", whiteSpace: "nowrap" }}>
+                        <td style={{ padding: "12px 14px", textAlign: "right", fontFamily: "DM Mono, monospace", fontWeight: 700, fontSize: 15, color: "#10b981", whiteSpace: "nowrap" }}>
                           {fmtINR(successAmt)}
                         </td>
-                        <td colSpan={2} />
+                        <td colSpan={2} style={{ background: "#f0fdf4" }} />
                       </tr>
                     </tfoot>
                   </table>
@@ -423,7 +382,7 @@ export default function AdminLedger() {
         )}
       </div>
 
-      {/* Transaction Detail Modal */}
+      {/* ── Transaction Detail Modal ── */}
       {selTxn && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}
           onClick={(e) => e.target === e.currentTarget && setSelTxn(null)}>
